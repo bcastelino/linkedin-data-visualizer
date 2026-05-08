@@ -3,6 +3,29 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "description": "Privacy-first, browser-only React app that turns your LinkedIn data export ZIP into an interactive insights dashboard with optional BYO-key AI summaries.",
+  "author": "Brian Castelino",
+  "license": "MIT",
+  "homepage": "https://bcastelino.github.io/linkedin-data-visualizer/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bcastelino/linkedin-data-visualizer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bcastelino/linkedin-data-visualizer/issues"
+  },
+  "keywords": [
+    "linkedin",
+    "data-export",
+    "visualization",
+    "dashboard",
+    "react",
+    "vite",
+    "tailwindcss",
+    "privacy",
+    "llm",
+    "openrouter"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

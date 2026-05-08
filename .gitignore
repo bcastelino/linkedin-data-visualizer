@@ -1,0 +1,15 @@
+linkedin_export
+!.gitignore
+
+# Node / Vite
+node_modules
+dist
+dist-ssr
+.vite
+*.local
+
+# Editor
+.vscode
+.idea
+.DS_Store
+*.log

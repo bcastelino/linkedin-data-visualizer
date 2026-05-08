@@ -1,12 +1,25 @@
-import { Linkedin, RotateCcw, Github } from 'lucide-react';
+import { useState } from 'react';
+import { Linkedin, RotateCcw, Github, FileDown, Loader2 } from 'lucide-react';
 import { useStore } from './store';
 import UploadZone from './components/UploadZone';
 import Dashboard from './components/Dashboard';
+import { downloadSampleZip } from './lib/sampleData';
 
 export default function App() {
   const stage = useStore((s) => s.stage);
   const reset = useStore((s) => s.reset);
   const ready = stage === 'ready';
+  const [downloadingSample, setDownloadingSample] = useState(false);
+
+  const onDownloadSample = async () => {
+    if (downloadingSample) return;
+    setDownloadingSample(true);
+    try {
+      await downloadSampleZip();
+    } finally {
+      setDownloadingSample(false);
+    }
+  };
 
   return (
     <div className="min-h-full">
@@ -28,6 +41,20 @@ export default function App() {
           <div className="flex items-center gap-2">
             {ready && (
               <button onClick={reset} className="btn-ghost"><RotateCcw className="size-4" /> Start over</button>
+            )}
+            {!ready && (
+              <button
+                type="button"
+                onClick={onDownloadSample}
+                disabled={downloadingSample}
+                className="btn-ghost"
+                title="Download a synthetic LinkedIn export ZIP to try the app"
+              >
+                {downloadingSample
+                  ? <Loader2 className="size-4 animate-spin text-brand-600" />
+                  : <FileDown className="size-4 text-brand-600" />}
+                <span className="hidden sm:inline">Sample data</span>
+              </button>
             )}
             <a className="btn-ghost" href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noreferrer">
               <Linkedin className="size-4 text-brand-600" /> Get your data

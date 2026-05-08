@@ -13,13 +13,9 @@ import LeftNav, { NAV, type TabId } from './LeftNav';
 import RightRail from './RightRail';
 import { detectedFilesForTab } from '../lib/tabFiles';
 import FilesUsedPopover from './FilesUsedPopover';
-import AISummaryTab from './ai/AISummaryTab';
-import CareerStrategyTab from './ai/CareerStrategyTab';
-import NetworkLeverageTab from './ai/NetworkLeverageTab';
-import PersonalBrandTab from './ai/PersonalBrandTab';
+import ProfileOptimizerTab from './ai/ProfileOptimizerTab';
 import JobSearchStrategyTab from './ai/JobSearchStrategyTab';
 import ActionPlanTab from './ai/ActionPlanTab';
-import BusinessOpportunitiesTab from './ai/BusinessOpportunitiesTab';
 
 export default function Dashboard() {
   const insights = useStore((s) => s.insights);
@@ -93,13 +89,9 @@ export default function Dashboard() {
         {tab === 'security' && <SecurityTab ins={insights} />}
 
         {/* AI insights */}
-        {tab === 'ai-summary' && <AISummaryTab />}
-        {tab === 'ai-career' && <CareerStrategyTab onOpenGenerator={() => setTab('ai-summary')} />}
-        {tab === 'ai-network' && <NetworkLeverageTab onOpenGenerator={() => setTab('ai-summary')} />}
-        {tab === 'ai-brand' && <PersonalBrandTab onOpenGenerator={() => setTab('ai-summary')} />}
-        {tab === 'ai-jobsearch' && <JobSearchStrategyTab onOpenGenerator={() => setTab('ai-summary')} />}
-        {tab === 'ai-actionplan' && <ActionPlanTab onOpenGenerator={() => setTab('ai-summary')} />}
-        {tab === 'ai-opportunities' && <BusinessOpportunitiesTab onOpenGenerator={() => setTab('ai-summary')} />}
+        {tab === 'ai-profile' && <ProfileOptimizerTab />}
+        {tab === 'ai-jobsearch' && <JobSearchStrategyTab onOpenGenerator={() => setTab('ai-profile')} />}
+        {tab === 'ai-actionplan' && <ActionPlanTab onOpenGenerator={() => setTab('ai-profile')} />}
 
         {/* Tools */}
         {tab === 'export' && <ExportPanel />}

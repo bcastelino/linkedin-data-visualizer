@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Home, Users, Newspaper, Briefcase, MessageSquare, Megaphone, ShieldCheck,
-  Sparkles, Download, Target, Network as NetworkIcon, CalendarCheck, Handshake,
+  Sparkles, Download, Target, CalendarCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -9,7 +9,7 @@ export type TabId =
   // Direct insights
   | 'overview' | 'network' | 'content' | 'jobs' | 'career' | 'messaging' | 'ads' | 'security'
   // AI insights
-  | 'ai-summary' | 'ai-career' | 'ai-network' | 'ai-brand' | 'ai-jobsearch' | 'ai-actionplan' | 'ai-opportunities'
+  | 'ai-profile' | 'ai-jobsearch' | 'ai-actionplan'
   // Tools
   | 'export';
 
@@ -35,13 +35,9 @@ export const NAV_GROUPS: NavGroup[] = [
     id: 'ai',
     title: 'AI Insights',
     items: [
-      { id: 'ai-summary', label: 'Executive summary', icon: Sparkles },
-      { id: 'ai-career', label: 'Career strategy', icon: Briefcase },
-      { id: 'ai-network', label: 'Network leverage', icon: NetworkIcon },
-      { id: 'ai-brand', label: 'Personal brand', icon: Megaphone },
+      { id: 'ai-profile', label: 'Profile optimizer', icon: Sparkles },
       { id: 'ai-jobsearch', label: 'Job search strategy', icon: Target },
       { id: 'ai-actionplan', label: '30-day action plan', icon: CalendarCheck },
-      { id: 'ai-opportunities', label: 'Business opportunities', icon: Handshake },
     ],
   },
   {

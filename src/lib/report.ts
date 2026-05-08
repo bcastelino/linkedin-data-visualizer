@@ -106,61 +106,53 @@ export function generateHtmlReport(ins: DerivedInsights, llm?: LLMOutput): strin
     </div>
   `).join('');
 
+  const po = llm?.profileOptimizer;
   const llmBlocks = llm ? `
+    ${po ? `
     <section>
-      <h2>Executive summary</h2>
-      <p>${esc(llm.executiveSummary)}</p>
-    </section>
-    <section>
-      <h2>Top insights</h2>
-      ${llm.topInsights.map((i) => `
-        <div class="finding p-${i.priority}">
-          <div class="finding-head"><span class="pill">${esc(i.priority.toUpperCase())}</span><h4>${esc(i.title)}</h4></div>
-          <p><strong>Evidence:</strong> ${esc(i.evidence)}</p>
-          <p><strong>Recommendation:</strong> ${esc(i.recommendation)}</p>
-        </div>`).join('')}
-    </section>
-    <section>
-      <h2>Action plans</h2>
-      <div class="grid-2">
-        <div><h3>Network</h3>${listBlock(llm.networkActions)}</div>
-        <div><h3>Career</h3>${listBlock(llm.careerActions)}</div>
-        <div><h3>Content</h3>${listBlock(llm.contentActions)}</div>
-        <div><h3>Privacy notes</h3>${listBlock(llm.privacyNotes)}</div>
-      </div>
-    </section>
-    ${llm.careerStrategy ? `
-    <section>
-      <h2>Career strategy</h2>
-      <p>${esc(llm.careerStrategy.summary)}</p>
-      <h3>Trajectory</h3>
-      <p>${esc(llm.careerStrategy.trajectory)}</p>
-      <div class="grid-2">
-        <div><h3>Plausible next roles</h3>${listBlock(llm.careerStrategy.nextRoles)}</div>
-        <div><h3>Risks</h3>${listBlock(llm.careerStrategy.risks)}</div>
-      </div>
-    </section>` : ''}
-    ${llm.networkLeverage ? `
-    <section>
-      <h2>Network leverage</h2>
-      <p>${esc(llm.networkLeverage.summary)}</p>
-      <div class="grid-2">
-        <div><h3>Strongest segments</h3>${listBlock(llm.networkLeverage.strongestSegments)}</div>
-        <div><h3>Relationship gaps</h3>${listBlock(llm.networkLeverage.gaps)}</div>
-      </div>
-      <h3>Outreach themes</h3>
-      ${listBlock(llm.networkLeverage.outreachThemes)}
-    </section>` : ''}
-    ${llm.personalBrand ? `
-    <section>
-      <h2>Personal brand</h2>
-      <p>${esc(llm.personalBrand.summary)}</p>
-      <div class="grid-2">
-        <div><h3>How you're likely perceived</h3>${listBlock(llm.personalBrand.perceived)}</div>
-        <div><h3>Recommended pillars</h3>${listBlock(llm.personalBrand.recommendedPillars)}</div>
-      </div>
-      <h3>Cadence</h3>
-      <p>${esc(llm.personalBrand.cadence)}</p>
+      <h2>Profile optimization</h2>
+      ${po.positioning ? `<p>${esc(po.positioning)}</p>` : ''}
+      ${po.headline ? `
+        <h3>1. Headline</h3>
+        ${po.headline.current ? `<p><strong>Current:</strong> ${esc(po.headline.current)}</p>` : ''}
+        ${po.headline.weakness ? `<p><strong>Weakness:</strong> ${esc(po.headline.weakness)}</p>` : ''}
+        ${po.headline.options?.length ? `<ol>${po.headline.options.map((o, i) => `<li>${i === po.headline.recommendedIndex ? '<strong>★ </strong>' : ''}${esc(o.text)}${o.rationale ? ` — <em>${esc(o.rationale)}</em>` : ''}</li>`).join('')}</ol>` : ''}
+        ${po.headline.whyRecommended ? `<p><strong>Why this wins:</strong> ${esc(po.headline.whyRecommended)}</p>` : ''}
+      ` : ''}
+      ${po.photoAndBanner ? `
+        <h3>2. Photo &amp; banner</h3>
+        <p><strong>Photo rating:</strong> ${esc(po.photoAndBanner.photoRating)}/10${po.photoAndBanner.photoNotes ? ` — ${esc(po.photoAndBanner.photoNotes)}` : ''}</p>
+        ${po.photoAndBanner.photoTips?.length ? `<h4>Photo tips</h4>${listBlock(po.photoAndBanner.photoTips)}` : ''}
+        ${po.photoAndBanner.bannerSuggestion ? `<p><strong>Banner concept:</strong> ${esc(po.photoAndBanner.bannerSuggestion)}</p>` : ''}
+        ${po.photoAndBanner.bannerText ? `<p><strong>Banner text:</strong> ${esc(po.photoAndBanner.bannerText)}</p>` : ''}
+      ` : ''}
+      ${po.about ? `
+        <h3>3. About rewrite</h3>
+        ${po.about.diagnosis ? `<p><strong>Diagnosis:</strong> ${esc(po.about.diagnosis)}</p>` : ''}
+        ${po.about.hook ? `<p><strong>Hook:</strong> ${esc(po.about.hook)}</p>` : ''}
+        ${po.about.rewrite ? `<pre style="white-space:pre-wrap;font-family:inherit;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">${esc(po.about.rewrite)}</pre>` : ''}
+      ` : ''}
+      ${po.experience?.length ? `
+        <h3>4. Experience rewrites</h3>
+        ${po.experience.map((r) => `
+          <h4>${esc(r.title || 'Role')}${r.company ? ` @ ${esc(r.company)}` : ''}</h4>
+          ${r.diagnosis ? `<p class="meta">${esc(r.diagnosis)}</p>` : ''}
+          ${r.rewritten?.length ? listBlock(r.rewritten) : ''}
+        `).join('')}
+      ` : ''}
+      ${po.skills ? `
+        <h3>5. Skills</h3>
+        ${po.skills.featureTop3?.length ? `<p><strong>Feature top 3:</strong> ${po.skills.featureTop3.map(esc).join(', ')}</p>` : ''}
+        ${po.skills.topPinned?.length ? `<p><strong>Top 10 pinned:</strong> ${po.skills.topPinned.map(esc).join(', ')}</p>` : ''}
+        ${po.skills.missingCritical?.length ? `<p><strong>Missing critical:</strong> ${po.skills.missingCritical.map(esc).join(', ')}</p>` : ''}
+      ` : ''}
+      ${po.quickWins ? `
+        <h3>6. Quick wins</h3>
+        ${po.quickWins.featuredSection?.length ? `<h4>Featured</h4>${listBlock(po.quickWins.featuredSection)}` : ''}
+        ${po.quickWins.customUrlSuggestion ? `<p><strong>Custom URL:</strong> ${esc(po.quickWins.customUrlSuggestion)}</p>` : ''}
+        ${po.quickWins.contentStrategy?.length ? `<h4>Content strategy</h4>${listBlock(po.quickWins.contentStrategy)}` : ''}
+        ${po.quickWins.recommendationRequestTemplate ? `<h4>Recommendation request template</h4><pre style="white-space:pre-wrap;font-family:inherit;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">${esc(po.quickWins.recommendationRequestTemplate)}</pre>` : ''}
+      ` : ''}
     </section>` : ''}
     ${llm.jobSearchStrategy ? `
     <section>
@@ -179,20 +171,6 @@ export function generateHtmlReport(ins: DerivedInsights, llm?: LLMOutput): strin
         <h3>Week ${w.week}: ${esc(w.focus)}</h3>
         ${listBlock(w.actions)}
       `).join('')}
-    </section>` : ''}
-    ${llm.businessOpportunities?.length ? `
-    <section>
-      <h2>Business opportunities</h2>
-      ${llm.businessOpportunities.map((op) => `
-        <h3>${esc(op.theme)}</h3>
-        <p><strong>Evidence:</strong> ${esc(op.evidence)}</p>
-        ${listBlock(op.suggestedActions)}
-      `).join('')}
-    </section>` : ''}
-    ${llm.reportSections?.length ? `
-    <section>
-      <h2>Narrative</h2>
-      ${llm.reportSections.map((s) => `<h3>${esc(s.heading)}</h3><p>${esc(s.body)}</p>`).join('')}
     </section>` : ''}
   ` : '';
 

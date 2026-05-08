@@ -36,9 +36,7 @@ LinkedIn lets you download your full data export but offers no first-class way t
 
 ## Demo
 
-A live build of `main` is auto-deployed to GitHub Pages:
-
-**<https://bcastelino.github.io/linkedin-data-visualizer/>**
+A live build of `main` is auto-deployed to GitHub Pages: **<https://bcastelino.github.io/linkedin-data-visualizer/>**
 
 ## Quick start
 

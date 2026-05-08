@@ -45,6 +45,7 @@ const PROVIDER_TAGLINES: Record<LLMProvider, string> = {
 
 export default function LLMPanel() {
   const insights = useStore((s) => s.insights);
+  const parsed = useStore((s) => s.parsed);
   const llmApiKeys = useStore((s) => s.llmApiKeys);
   const rememberKeys = useStore((s) => s.rememberKeys);
   const setLlmApiKey = useStore((s) => s.setLlmApiKey);
@@ -65,7 +66,7 @@ export default function LLMPanel() {
   const [showKey, setShowKey] = useState(false);
   const [showPayload, setShowPayload] = useState(false);
 
-  const payload = useMemo(() => insights ? buildPromptPayload(insights) : null, [insights]);
+  const payload = useMemo(() => insights ? buildPromptPayload(insights, parsed) : null, [insights, parsed]);
   const payloadStr = useMemo(() => payload ? JSON.stringify(payload, null, 2) : '', [payload]);
   const apiKey = llmApiKeys[provider];
   const remember = rememberKeys[provider];
@@ -291,57 +292,6 @@ export default function LLMPanel() {
 
       <CallLog entries={callLog} onClear={clearLlmCallLog} />
 
-      {result?.parsed && (
-        <div className="card space-y-4">
-          <div>
-            <h3 className="font-semibold mb-1">Executive summary</h3>
-            <p className="text-sm text-slate-700 whitespace-pre-line">{result.parsed.executiveSummary}</p>
-          </div>
-          {result.parsed.topInsights?.length > 0 && (
-            <div>
-              <h3 className="font-semibold mb-2">Top insights</h3>
-              <div className="space-y-2">
-                {result.parsed.topInsights.map((i: import('../lib/llm').LLMTopInsight, idx: number) => (
-                  <div key={idx} className="rounded border border-slate-200 p-3">
-                    <div className="flex items-center gap-2"><span className="pill uppercase">{i.priority}</span><h4 className="font-semibold">{i.title}</h4></div>
-                    <p className="text-sm text-slate-700 mt-1"><b>Evidence:</b> {i.evidence}</p>
-                    <p className="text-sm text-slate-700"><b>Recommendation:</b> {i.recommendation}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <ActionList title="Network actions" items={result.parsed.networkActions} />
-            <ActionList title="Career actions" items={result.parsed.careerActions} />
-            <ActionList title="Content actions" items={result.parsed.contentActions} />
-            <ActionList title="Privacy notes" items={result.parsed.privacyNotes} />
-          </div>
-          {(() => {
-            const exec = (result.parsed.executiveSummary || '').trim();
-            const sections = (result.parsed.reportSections || []).filter((s: import('../lib/llm').LLMReportSection) => {
-              const heading = (s.heading || '').toLowerCase().trim();
-              const body = (s.body || '').trim();
-              const isExecHeading = /^(executive\s+(summary|overview)|overview|summary)$/i.test(heading);
-              const isExecBody = body && exec && (body === exec || body.startsWith(exec.slice(0, 80)));
-              return !(isExecHeading || isExecBody);
-            });
-            if (sections.length === 0) return null;
-            return (
-              <div>
-                <h3 className="font-semibold mb-2">Narrative</h3>
-                {sections.map((s: import('../lib/llm').LLMReportSection, i: number) => (
-                  <div key={i} className="mb-3">
-                    <h4 className="font-medium text-slate-800">{s.heading}</h4>
-                    <p className="text-sm text-slate-700 whitespace-pre-line">{s.body}</p>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-        </div>
-      )}
-
       {result && !result.parsed && (
         <div className="card">
           <h3 className="font-semibold mb-1">Model returned non-JSON output</h3>
@@ -443,15 +393,3 @@ function CallLog({ entries, onClear }: { entries: import('../store').LLMCallLogE
   );
 }
 
-function ActionList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <h4 className="font-semibold mb-1">{title}</h4>
-      {items?.length ? (
-        <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
-          {items.map((s, i) => <li key={i}>{s}</li>)}
-        </ul>
-      ) : <p className="text-sm text-slate-500">—</p>}
-    </div>
-  );
-}

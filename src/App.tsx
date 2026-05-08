@@ -13,7 +13,11 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
         <div className="max-w-[1500px] mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="rounded-md bg-brand-500 text-white size-8 grid place-items-center font-bold">in</div>
+            <img
+              src={`${import.meta.env.BASE_URL}icon.png`}
+              alt="LinkedIn Data Visualizer logo"
+              className="size-8 rounded-md shadow-sm"
+            />
             <div>
               <h1 className="text-base font-semibold leading-tight flex items-center gap-2">
                 LinkedIn Data Visualizer
@@ -25,7 +29,7 @@ export default function App() {
             {ready && (
               <button onClick={reset} className="btn-ghost"><RotateCcw className="size-4" /> Start over</button>
             )}
-            <a className="btn-ghost" href="https://www.linkedin.com/help/linkedin/answer/a1339364/downloading-your-account-data" target="_blank" rel="noreferrer">
+            <a className="btn-ghost" href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noreferrer">
               <Linkedin className="size-4 text-brand-600" /> Get your data
             </a>
             <a className="btn-ghost hidden sm:inline-flex" href="https://github.com/bcastelino/linkedin-data-visualizer" target="_blank" rel="noreferrer">

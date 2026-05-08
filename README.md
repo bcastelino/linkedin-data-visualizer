@@ -2,7 +2,7 @@
 
 # LinkedIn Data Visualizer
 
-**Turn your LinkedIn data export into an interactive, privacy-first insights dashboard — entirely in your browser.**
+**Turn your LinkedIn data export into an interactive, privacy-first insights dashboard - entirely in your browser.**
 
 [![Deploy to GitHub Pages](https://github.com/bcastelino/linkedin-data-visualizer/actions/workflows/deploy.yml/badge.svg)](https://github.com/bcastelino/linkedin-data-visualizer/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -19,20 +19,20 @@
 
 ## Why this exists
 
-LinkedIn lets you download your full data export but offers no first-class way to actually **understand** it. This app reads the export ZIP **entirely in your browser**, builds dashboards, computes deterministic findings, and — optionally — enriches them with an LLM you control via your own API key. Nothing is uploaded, nothing is logged, no server is involved.
+LinkedIn lets you download your full data export but offers no first-class way to actually **understand** it. This app reads the export ZIP **entirely in your browser**, builds dashboards, computes deterministic findings, and - optionally - enriches them with an LLM you control via your own API key. Nothing is uploaded, nothing is logged, no server is involved.
 
 > **Your data never leaves your device.** The only network calls happen if *you* choose to run the optional AI step, in which case the request goes directly from your browser to the LLM provider you selected, using *your* API key. The author of this site never sees your data or your key.
 
 ## Features
 
-- **Drag-and-drop ZIP parsing** — `jszip` + `papaparse` decode your export entirely client-side.
-- **Seven dashboards** — Overview, Network, Content, Career, Messaging, Ads & Inferences, and Account & Security, with charts (Recharts) and curated KPIs.
-- **Deterministic findings engine** — evidence-backed insights computed locally with no LLM required.
-- **Composite scores** — visibility, network health, career momentum, content output, and privacy posture (0–100).
-- **Optional AI insights** — bring your own key for **OpenRouter, OpenAI, Anthropic, Google Gemini, or HuggingFace**. Quick-pick chips for popular models, free-text input for any model id, "Browse all models" deep-links per provider.
-- **LLM call log** — per-call table with date, routed model, tokens (input/output), cost, speed (tok/s), and finish reason — similar to OpenRouter's activity view.
-- **Downloadable HTML report** — single self-contained `.html` with aggregate metrics, SVG charts, findings, and the AI narrative. Raw rows, message bodies, IPs, and contact identifiers are intentionally excluded.
-- **Static-host friendly** — zero backend; ships to GitHub Pages, Cloudflare Pages, Vercel, or any static host.
+- **Drag-and-drop ZIP parsing** - `jszip` + `papaparse` decode your export entirely client-side.
+- **Seven dashboards** - Overview, Network, Content, Career, Messaging, Ads & Inferences, and Account & Security, with charts (Recharts) and curated KPIs.
+- **Deterministic findings engine** - evidence-backed insights computed locally with no LLM required.
+- **Composite scores** - visibility, network health, career momentum, content output, and privacy posture (0–100).
+- **Optional AI insights** - bring your own key for **OpenRouter, OpenAI, Anthropic, Google Gemini, or HuggingFace**. Quick-pick chips for popular models, free-text input for any model id, "Browse all models" deep-links per provider.
+- **LLM call log** - per-call table with date, routed model, tokens (input/output), cost, speed (tok/s), and finish reason - similar to OpenRouter's activity view.
+- **Downloadable HTML report** - single self-contained `.html` with aggregate metrics, SVG charts, findings, and the AI narrative. Raw rows, message bodies, IPs, and contact identifiers are intentionally excluded.
+- **Static-host friendly** - zero backend; ships to GitHub Pages, Cloudflare Pages, Vercel, or any static host.
 
 ## Demo
 
@@ -72,9 +72,10 @@ Open <http://localhost:5173> and drop your LinkedIn ZIP onto the upload zone.
 1. Sign in to LinkedIn → **Settings & Privacy** → **Data Privacy** → **Get a copy of your data**.
 2. Choose *"Want something in particular?"* for the fastest export.
 3. Wait for the email (usually < 10 minutes for the fast option, up to 24 h for the larger archive).
-4. Download the ZIP — do **not** unzip it. Drop it directly onto this app.
+4. Download the ZIP - do **not** unzip it. Drop it directly onto this app.
 
-Full guide: [LinkedIn Help — Downloading Your Account Data](https://www.linkedin.com/help/linkedin/answer/a1339364/downloading-your-account-data).
+Full guide: [LinkedIn Help - Downloading Your Account Data](https://www.linkedin.com/help/linkedin/answer/a1339364/downloading-your-account-data).<br>
+LinkedIn Settings: [Download my Data](https://www.linkedin.com/mypreferences/d/download-my-data).
 
 ## Privacy model
 
@@ -91,7 +92,7 @@ What's **never** sent: connection names, message content, recipients, profile UR
 
 ## AI providers
 
-Bring your own key — pick whichever you prefer:
+Bring your own key - pick whichever you prefer:
 
 | Provider | Highlight | Get a key |
 | --- | --- | --- |
@@ -101,7 +102,7 @@ Bring your own key — pick whichever you prefer:
 | **Google Gemini** | 1.5 Pro / Flash, free tier available | [ai.google.dev](https://ai.google.dev/api?active=genai) |
 | **HuggingFace** | Open-source models (Llama, Mistral, Qwen, Gemma, …) | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
 
-The model field accepts any model id from the provider — quick-pick chips are provided for convenience, and a "Browse all models" link opens each provider's catalog.
+The model field accepts any model id from the provider - quick-pick chips are provided for convenience, and a "Browse all models" link opens each provider's catalog.
 
 ## Architecture
 
@@ -121,10 +122,10 @@ src/
 
 ### Key flows
 
-1. **Upload** — `UploadZone` hands the `File` to `parser.ts`, which streams CSVs out of the ZIP and emits a typed `ParsedExport`.
-2. **Insights** — `insights.ts` rolls the parsed data into `DerivedInsights` (totals, monthly trends, top-N lists, scores).
-3. **AI (optional)** — `llm.ts#buildPromptPayload` extracts an aggregate-only payload and sends it to the chosen provider through one of the `callOpenRouter` / `callOpenAI` / `callAnthropic` / `callGoogle` / `callHuggingFace` adapters. Each adapter normalizes token usage, finish reason, model used, and cost into a common `LLMCallMeta` consumed by the call-log table.
-4. **Report** — `report.ts` produces a stand-alone HTML document with inline SVG charts and the AI narrative.
+1. **Upload** - `UploadZone` hands the `File` to `parser.ts`, which streams CSVs out of the ZIP and emits a typed `ParsedExport`.
+2. **Insights** - `insights.ts` rolls the parsed data into `DerivedInsights` (totals, monthly trends, top-N lists, scores).
+3. **AI (optional)** - `llm.ts#buildPromptPayload` extracts an aggregate-only payload and sends it to the chosen provider through one of the `callOpenRouter` / `callOpenAI` / `callAnthropic` / `callGoogle` / `callHuggingFace` adapters. Each adapter normalizes token usage, finish reason, model used, and cost into a common `LLMCallMeta` consumed by the call-log table.
+4. **Report** - `report.ts` produces a stand-alone HTML document with inline SVG charts and the AI narrative.
 
 ## Deploy to GitHub Pages
 
@@ -173,7 +174,7 @@ Contributions are welcome. The general flow:
 2. Make your change with tests / type-checks passing (`npm run lint`).
 3. Open a PR with a clear description and screenshots if it touches UI.
 
-Please keep the **privacy guarantees** intact — any change that would send raw rows, message bodies, or contact identifiers off-device must be rejected or made strictly opt-in with an explicit confirmation.
+Please keep the **privacy guarantees** intact - any change that would send raw rows, message bodies, or contact identifiers off-device must be rejected or made strictly opt-in with an explicit confirmation.
 
 ## Acknowledgements
 

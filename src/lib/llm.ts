@@ -457,13 +457,15 @@ export async function callHuggingFace(params: LLMCallParams): Promise<LLMCallRes
 
   // Use the OpenAI-compatible chat completions route (router.huggingface.co)
   // which works for many hosted models without manual chat-template wrangling.
+  // Model id can be `<org>/<model>` (auto-route) or `<org>/<model>:<provider>`
+  // (pin to a specific inference provider, e.g. `:novita`, `:together`).
   const body = {
     model: params.model,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       {
         role: 'user',
-        content: `${USER_INSTRUCTIONS}\n\nDATA:\n${JSON.stringify(params.payload).slice(0, 90_000)}`,
+        content: `${USER_INSTRUCTIONS}\n\nDATA:\n${JSON.stringify(params.payload).slice(0, 90_000)}\n\nReturn ONLY valid JSON. No prose, no code fences.`,
       },
     ],
     temperature: 0.4,
@@ -485,8 +487,24 @@ export async function callHuggingFace(params: LLMCallParams): Promise<LLMCallRes
     throw new Error(`HuggingFace error ${res.status}: ${text || res.statusText}`);
   }
   const data = await res.json();
+
+  // HF routed providers occasionally return a 200 with an `error` field in the
+  // body (e.g. model loading, provider-side rate limit). Surface it explicitly.
+  if (data?.error) {
+    const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+    throw new Error(`HuggingFace provider error: ${errMsg}`);
+  }
+
   const choice = data?.choices?.[0];
   const raw: string = choice?.message?.content ?? '';
+  if (!raw || !raw.trim()) {
+    const finish: string | undefined = choice?.finish_reason;
+    throw new Error(
+      `HuggingFace returned an empty response${finish ? ` (finish_reason="${finish}")` : ''}. ` +
+      `Try pinning a provider (e.g. "${params.model}:novita") or a smaller model.`
+    );
+  }
+
   let parsed: LLMOutput | undefined;
   try {
     parsed = JSON.parse(stripJsonFences(raw)) as LLMOutput;
@@ -540,14 +558,16 @@ export const PROVIDER_MODELS: Record<string, { id: string; label: string }[]> = 
     { id: 'gemini-1.0-pro', label: 'Gemini 1.0 Pro' },
   ],
   huggingface: [
-    { id: 'meta-llama/Meta-Llama-3.1-70B-Instruct', label: 'Llama 3.1 70B Instruct' },
+    { id: 'meta-llama/Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B Instruct' },
     { id: 'meta-llama/Meta-Llama-3.1-8B-Instruct', label: 'Llama 3.1 8B Instruct (fast)' },
-    { id: 'mistralai/Mixtral-8x7B-Instruct-v0.1', label: 'Mixtral 8x7B Instruct' },
-    { id: 'mistralai/Mistral-7B-Instruct-v0.3', label: 'Mistral 7B Instruct v0.3' },
     { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen 2.5 72B Instruct' },
-    { id: 'Qwen/Qwen2.5-7B-Instruct', label: 'Qwen 2.5 7B Instruct' },
+    { id: 'Qwen/QwQ-32B', label: 'Qwen QwQ 32B (reasoning)' },
+    { id: 'mistralai/Mistral-Nemo-Instruct-2407', label: 'Mistral Nemo 12B Instruct' },
+    { id: 'mistralai/Mixtral-8x7B-Instruct-v0.1', label: 'Mixtral 8x7B Instruct' },
+    { id: 'deepseek-ai/DeepSeek-V4-Pro:novita', label: 'DeepSeek V4 Pro (Novita)' },
+    { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3' },
+    { id: 'google/gemma-4-31B-it', label: 'Gemma 4 31B Instruct' },
     { id: 'HuggingFaceH4/zephyr-7b-beta', label: 'Zephyr 7B Beta' },
-    { id: 'google/gemma-2-27b-it', label: 'Gemma 2 27B Instruct' },
   ],
 };
 

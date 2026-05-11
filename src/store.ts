@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import type { ParsedExport, ParseProgress } from './types';
 import type { DerivedInsights } from './lib/insights';
+import type { WebLLMStatus, WebLLMProgress } from './lib/webllm';
 
 export type Stage = 'idle' | 'extracting' | 'parsing' | 'ready' | 'error';
 
-export type LLMProvider = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'huggingface';
+export type LLMProvider = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'huggingface' | 'webllm';
 
 interface LLMResult {
   raw: string;
@@ -48,6 +49,11 @@ interface AppState {
   llmError?: string;
   llmCallLog: LLMCallLogEntry[];
 
+  // WebLLM (in-browser) state
+  webllmStatus: WebLLMStatus;
+  webllmProgress?: WebLLMProgress;
+  webllmLoadedModel?: string;
+
   setStage: (s: Stage, error?: string) => void;
   setProgress: (p: ParseProgress) => void;
   setParsed: (parsed: ParsedExport, insights: DerivedInsights, fileName: string) => void;
@@ -61,6 +67,10 @@ interface AppState {
   setLlmError: (e: string | undefined) => void;
   appendLlmCallLog: (entry: LLMCallLogEntry) => void;
   clearLlmCallLog: () => void;
+
+  setWebllmStatus: (s: WebLLMStatus) => void;
+  setWebllmProgress: (p: WebLLMProgress | undefined) => void;
+  setWebllmLoadedModel: (m: string | undefined) => void;
 }
 
 const KEY_PREFIX = 'lvd.llm.key.';
@@ -72,6 +82,7 @@ const persistedKeys: Record<LLMProvider, string> = {
   anthropic: typeof localStorage !== 'undefined' ? (localStorage.getItem(KEY_PREFIX + 'anthropic') ?? '') : '',
   google: typeof localStorage !== 'undefined' ? (localStorage.getItem(KEY_PREFIX + 'google') ?? '') : '',
   huggingface: typeof localStorage !== 'undefined' ? (localStorage.getItem(KEY_PREFIX + 'huggingface') ?? '') : '',
+  webllm: '',
 };
 
 const persistedRemember: Record<LLMProvider, boolean> = {
@@ -80,6 +91,7 @@ const persistedRemember: Record<LLMProvider, boolean> = {
   anthropic: typeof localStorage !== 'undefined' ? localStorage.getItem(REMEMBER_PREFIX + 'anthropic') === 'true' : false,
   google: typeof localStorage !== 'undefined' ? localStorage.getItem(REMEMBER_PREFIX + 'google') === 'true' : false,
   huggingface: typeof localStorage !== 'undefined' ? localStorage.getItem(REMEMBER_PREFIX + 'huggingface') === 'true' : false,
+  webllm: false,
 };
 
 export const useStore = create<AppState>((set) => ({
@@ -90,6 +102,7 @@ export const useStore = create<AppState>((set) => ({
   rememberKeys: persistedRemember,
   llmRunning: false,
   llmCallLog: [],
+  webllmStatus: 'idle',
 
   setStage: (stage, error) => set({ stage, error }),
   setProgress: (progress) => set({ progress }),
@@ -118,4 +131,8 @@ export const useStore = create<AppState>((set) => ({
   setLlmError: (llmError) => set({ llmError }),
   appendLlmCallLog: (entry) => set((state) => ({ llmCallLog: [entry, ...state.llmCallLog].slice(0, 50) })),
   clearLlmCallLog: () => set({ llmCallLog: [] }),
+
+  setWebllmStatus: (webllmStatus) => set({ webllmStatus }),
+  setWebllmProgress: (webllmProgress) => set({ webllmProgress }),
+  setWebllmLoadedModel: (webllmLoadedModel) => set({ webllmLoadedModel }),
 }));

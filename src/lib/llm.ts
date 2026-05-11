@@ -1,5 +1,6 @@
 import type { DerivedInsights } from './insights';
 import type { ParsedExport } from '../types';
+import { getWebLLMEngine, type WebLLMProgress } from './webllm';
 
 export type JobSearchIntent = 'active' | 'passive' | 'pivot' | 'exploring' | 'stable' | 'unknown';
 
@@ -730,6 +731,59 @@ export async function callHuggingFace(params: LLMCallParams): Promise<LLMCallRes
   return { raw, parsed, meta, parseError, diagnostics };
 }
 
+/**
+ * Run inference fully in-browser via @mlc-ai/web-llm (WebGPU).
+ *
+ * No API key required. The first call for a given model downloads the
+ * weights into the browser's Cache Storage; subsequent calls reuse them.
+ *
+ * Uses response_format=json_object so the existing JSON schema flow works
+ * without changing the prompt or chunking.
+ */
+export interface WebLLMCallParams extends LLMCallParams {
+  onProgress?: (p: WebLLMProgress) => void;
+}
+
+export async function callWebLLM(params: WebLLMCallParams): Promise<LLMCallResult> {
+  const engine = await getWebLLMEngine(params.model, params.onProgress);
+
+  const response = await engine.chat.completions.create({
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `${USER_INSTRUCTIONS}\n\nDATA:\n${JSON.stringify(params.payload).slice(0, 90_000)}\n\nReturn ONLY valid JSON. No prose, no code fences.`,
+      },
+    ],
+    temperature: 0.4,
+    max_tokens: 4096,
+    response_format: { type: 'json_object' },
+  });
+
+  const choice = response?.choices?.[0];
+  const raw: string = choice?.message?.content ?? '';
+  if (!raw || !raw.trim()) {
+    throw new Error(
+      `WebLLM returned an empty response${choice?.finish_reason ? ` (finish_reason="${choice.finish_reason}")` : ''}. ` +
+      `Try a larger model (e.g. Llama 3.1 8B) or check that your GPU has enough memory.`
+    );
+  }
+
+  const { parsed, error: parseError, diagnostics } = extractJson(raw);
+  const usage = response?.usage ?? {};
+  const meta: LLMCallMeta = {
+    modelRequested: params.model,
+    modelUsed: params.model,
+    inputTokens: usage.prompt_tokens,
+    outputTokens: usage.completion_tokens,
+    totalTokens: usage.total_tokens,
+    finishReason: choice?.finish_reason,
+    costUsd: 0,
+    extra: { local: true },
+  };
+  return { raw, parsed, meta, parseError, diagnostics };
+}
+
 function stripJsonFences(s: string): string {
   return s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
 }
@@ -911,7 +965,14 @@ export function extractJson(raw: string): JSONExtractionResult {
   };
 }
 
-export const PROVIDER_MODELS: Record<string, { id: string; label: string }[]> = {
+export interface ProviderModel {
+  id: string;
+  label: string;
+  /** Optional tier/group label used to bucket chips in the UI (e.g. for WebLLM). */
+  tier?: string;
+}
+
+export const PROVIDER_MODELS: Record<string, ProviderModel[]> = {
   openrouter: [
     { id: 'openrouter/free', label: 'Free Model Router' },
     { id: 'openrouter/auto', label: 'Best Model Router' },
@@ -951,6 +1012,42 @@ export const PROVIDER_MODELS: Record<string, { id: string; label: string }[]> = 
     { id: 'mistralai/Mistral-Nemo-Instruct-2407', label: 'Mistral Nemo 12B Instruct' },
     { id: 'google/gemma-4-31B-it', label: 'Gemma 4 31B Instruct' },
     { id: 'HuggingFaceH4/zephyr-7b-beta', label: 'Zephyr 7B Beta' },
+  ],
+  // Curated from @mlc-ai/web-llm prebuiltAppConfig.model_list — see
+  // https://github.com/mlc-ai/web-llm/issues/683 for the upstream catalog.
+  // VRAM figures in labels are the values reported by web-llm.
+  webllm: [
+    // ── Recommended: 7-9B chat models (best quality for full schema) ──
+    { tier: 'Recommended · 7–9B (best quality)', id: 'Llama-3.1-8B-Instruct-q4f16_1-MLC', label: 'Llama 3.1 8B Instruct · 5.0 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'Llama-3.1-8B-Instruct-q4f16_1-MLC-1k', label: 'Llama 3.1 8B Instruct (1k ctx) · 4.6 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'Hermes-3-Llama-3.1-8B-q4f16_1-MLC', label: 'Hermes 3 · Llama 3.1 8B · 4.9 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'Qwen3-8B-q4f16_1-MLC', label: 'Qwen3 8B · 5.7 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 7B Instruct · 5.1 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'Mistral-7B-Instruct-v0.3-q4f16_1-MLC', label: 'Mistral 7B Instruct v0.3 · 4.6 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC', label: 'DeepSeek R1 Distill · Llama 8B · 5.0 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC', label: 'DeepSeek R1 Distill · Qwen 7B · 5.1 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'gemma-2-9b-it-q4f16_1-MLC', label: 'Gemma 2 9B Instruct · 6.4 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'Qwen3.5-9B-q4f16_1-MLC', label: 'Qwen 3.5 9B · 6.4 GB' },
+    { tier: 'Recommended · 7–9B (best quality)', id: 'OLMo-2-1124-7B-Instruct-q4f16_1-MLC', label: 'OLMo 2 7B Instruct · 6.5 GB' },
+
+    // ── Mid (3-4B): solid balance of quality and speed ──
+    { tier: 'Mid · 3–4B (balanced)', id: 'Phi-4-mini-instruct-q4f16_1-MLC', label: 'Phi-4 mini Instruct · 3.4 GB' },
+    { tier: 'Mid · 3–4B (balanced)', id: 'Phi-3.5-mini-instruct-q4f16_1-MLC', label: 'Phi-3.5 mini Instruct · 3.7 GB' },
+    { tier: 'Mid · 3–4B (balanced)', id: 'Qwen3-4B-q4f16_1-MLC', label: 'Qwen3 4B · 3.4 GB' },
+    { tier: 'Mid · 3–4B (balanced)', id: 'Qwen3.5-4B-q4f16_1-MLC', label: 'Qwen 3.5 4B · 3.9 GB' },
+    { tier: 'Mid · 3–4B (balanced)', id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B Instruct · 2.3 GB' },
+    { tier: 'Mid · 3–4B (balanced)', id: 'Hermes-3-Llama-3.2-3B-q4f16_1-MLC', label: 'Hermes 3 · Llama 3.2 3B · 2.3 GB' },
+    { tier: 'Mid · 3–4B (balanced)', id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 3B Instruct · 2.5 GB' },
+    { tier: 'Mid · 3–4B (balanced)', id: 'Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC', label: 'Ministral 3 3B Instruct · 2.9 GB' },
+    { tier: 'Mid · 3–4B (balanced)', id: 'gemma-2-2b-it-q4f16_1-MLC', label: 'Gemma 2 2B Instruct · 1.9 GB' },
+
+    // ── Small (≤2B): tiny / low-VRAM / fast first-load ──
+    { tier: 'Small · ≤2B (fast / low VRAM)', id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 1B Instruct · 0.9 GB · fast' },
+    { tier: 'Small · ≤2B (fast / low VRAM)', id: 'Qwen3-1.7B-q4f16_1-MLC', label: 'Qwen3 1.7B · 2.0 GB · fast' },
+    { tier: 'Small · ≤2B (fast / low VRAM)', id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen 2.5 1.5B Instruct · 1.6 GB · fast' },
+    { tier: 'Small · ≤2B (fast / low VRAM)', id: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC', label: 'SmolLM2 1.7B Instruct · 1.8 GB · fast' },
+    { tier: 'Small · ≤2B (fast / low VRAM)', id: 'gemma3-1b-it-q4f16_1-MLC', label: 'Gemma 3 1B Instruct · 0.7 GB · fast' },
+    { tier: 'Small · ≤2B (fast / low VRAM)', id: 'Qwen3-0.6B-q4f16_1-MLC', label: 'Qwen3 0.6B · 1.4 GB · tiny' },
   ],
 };
 

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Sparkles, KeyRound, Loader2, ShieldAlert, Eye, EyeOff, ExternalLink, Lock, Copy, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { Sparkles, KeyRound, Loader2, ShieldAlert, Eye, EyeOff, ExternalLink, Lock, Copy, AlertCircle, CheckCircle2, XCircle, Cpu, Download } from 'lucide-react';
 import { useStore, LLMProvider } from '../store';
-import { PROVIDER_MODELS, buildPromptPayload, callOpenRouter, callOpenAI, callAnthropic, callGoogle, callHuggingFace } from '../lib/llm';
+import { PROVIDER_MODELS, buildPromptPayload, callOpenRouter, callOpenAI, callAnthropic, callGoogle, callHuggingFace, callWebLLM } from '../lib/llm';
+import { isWebGPUAvailable } from '../lib/webllm';
 
 const PROVIDER_LABELS: Record<LLMProvider, string> = {
   openrouter: 'OpenRouter',
@@ -9,6 +10,7 @@ const PROVIDER_LABELS: Record<LLMProvider, string> = {
   anthropic: 'Anthropic',
   google: 'Google (Gemini)',
   huggingface: 'HuggingFace',
+  webllm: 'Local (WebLLM)',
 };
 
 const PROVIDER_KEY_LINKS: Record<LLMProvider, string> = {
@@ -17,6 +19,7 @@ const PROVIDER_KEY_LINKS: Record<LLMProvider, string> = {
   anthropic: 'https://console.anthropic.com/settings/keys',
   google: 'https://ai.google.dev/api?active=genai',
   huggingface: 'https://huggingface.co/settings/tokens',
+  webllm: 'https://github.com/mlc-ai/web-llm',
 };
 
 const PROVIDER_MODELS_LINKS: Record<LLMProvider, string> = {
@@ -25,6 +28,7 @@ const PROVIDER_MODELS_LINKS: Record<LLMProvider, string> = {
   anthropic: 'https://docs.anthropic.com/en/docs/about-claude/models',
   google: 'https://ai.google.dev/gemini-api/docs/models/gemini',
   huggingface: 'https://huggingface.co/models?inference=warm&pipeline_tag=text-generation',
+  webllm: 'https://mlc.ai/models',
 };
 
 const PROVIDER_PLACEHOLDERS: Record<LLMProvider, string> = {
@@ -33,6 +37,7 @@ const PROVIDER_PLACEHOLDERS: Record<LLMProvider, string> = {
   anthropic: 'sk-ant-...',
   google: 'AIza...',
   huggingface: 'hf_...',
+  webllm: '',
 };
 
 const PROVIDER_TAGLINES: Record<LLMProvider, string> = {
@@ -41,6 +46,7 @@ const PROVIDER_TAGLINES: Record<LLMProvider, string> = {
   anthropic: 'Claude 3.5 Sonnet · Opus · official API',
   google: 'Gemini 1.5 Pro · Flash · free tier available',
   huggingface: 'Open-source models · Llama · Mistral · Qwen',
+  webllm: 'Runs entirely in your browser · no API key · WebGPU',
 };
 
 export default function LLMPanel() {
@@ -62,9 +68,17 @@ export default function LLMPanel() {
   const callLog = useStore((s) => s.llmCallLog);
   const appendLlmCallLog = useStore((s) => s.appendLlmCallLog);
   const clearLlmCallLog = useStore((s) => s.clearLlmCallLog);
+  const webllmStatus = useStore((s) => s.webllmStatus);
+  const webllmProgress = useStore((s) => s.webllmProgress);
+  const webllmLoadedModel = useStore((s) => s.webllmLoadedModel);
+  const setWebllmStatus = useStore((s) => s.setWebllmStatus);
+  const setWebllmProgress = useStore((s) => s.setWebllmProgress);
+  const setWebllmLoadedModel = useStore((s) => s.setWebllmLoadedModel);
 
   const [showKey, setShowKey] = useState(false);
   const [showPayload, setShowPayload] = useState(false);
+  const webgpu = useMemo(() => isWebGPUAvailable(), []);
+  const isLocal = provider === 'webllm';
 
   const payload = useMemo(() => insights ? buildPromptPayload(insights, parsed) : null, [insights, parsed]);
   const payloadStr = useMemo(() => payload ? JSON.stringify(payload, null, 2) : '', [payload]);
@@ -75,7 +89,14 @@ export default function LLMPanel() {
   if (!insights) return null;
 
   const run = async () => {
-    if (!apiKey) { setLlmError(`Enter your ${PROVIDER_LABELS[provider]} API key first.`); return; }
+    if (provider !== 'webllm' && !apiKey) {
+      setLlmError(`Enter your ${PROVIDER_LABELS[provider]} API key first.`);
+      return;
+    }
+    if (provider === 'webllm' && !webgpu.available) {
+      setLlmError(webgpu.reason || 'WebGPU is not available in this browser.');
+      return;
+    }
     if (!payload) return;
     setLlmError(undefined);
     setLlmRunning(true);
@@ -98,6 +119,25 @@ export default function LLMPanel() {
         case 'huggingface':
           r = await callHuggingFace({ apiKey, model, payload });
           break;
+        case 'webllm': {
+          const needsLoad = webllmLoadedModel !== model;
+          if (needsLoad) {
+            setWebllmStatus('downloading');
+            setWebllmProgress({ progress: 0, text: 'Initializing...' });
+          }
+          r = await callWebLLM({
+            apiKey: '',
+            model,
+            payload,
+            onProgress: (p) => {
+              setWebllmStatus(p.progress >= 1 ? 'loading' : 'downloading');
+              setWebllmProgress(p);
+            },
+          });
+          setWebllmStatus('ready');
+          setWebllmLoadedModel(model);
+          break;
+        }
         default:
           throw new Error(`Unknown provider: ${provider}`);
       }
@@ -119,6 +159,7 @@ export default function LLMPanel() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'LLM call failed.';
       setLlmError(msg);
+      if (provider === 'webllm') setWebllmStatus('error');
       appendLlmCallLog({
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         timestamp: Date.now(),
@@ -182,33 +223,44 @@ export default function LLMPanel() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* API Key */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-medium text-slate-700">{PROVIDER_LABELS[provider]} API key</label>
-                <a className="text-xs text-brand-600 hover:text-brand-700 inline-flex items-center gap-1" href={PROVIDER_KEY_LINKS[provider]} target="_blank" rel="noreferrer">
-                  Get key <ExternalLink className="size-3" />
-                </a>
+            {/* API Key — hidden for WebLLM */}
+            {isLocal ? (
+              <WebLLMStatusCard
+                supported={webgpu.available}
+                supportReason={webgpu.reason}
+                status={webllmStatus}
+                progress={webllmProgress}
+                loadedModel={webllmLoadedModel}
+                selectedModel={model}
+              />
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-slate-700">{PROVIDER_LABELS[provider]} API key</label>
+                  <a className="text-xs text-brand-600 hover:text-brand-700 inline-flex items-center gap-1" href={PROVIDER_KEY_LINKS[provider]} target="_blank" rel="noreferrer">
+                    Get key <ExternalLink className="size-3" />
+                  </a>
+                </div>
+                <div className="relative">
+                  <KeyRound className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    placeholder={PROVIDER_PLACEHOLDERS[provider]}
+                    value={apiKey}
+                    onChange={(e) => setLlmApiKey(provider, e.target.value, remember)}
+                    className="w-full rounded-lg border border-slate-300 bg-slate-50 focus:bg-white pl-8 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+                  />
+                  <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700" onClick={() => setShowKey(!showKey)} aria-label="Toggle key visibility">
+                    {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
+                <label className="flex items-center gap-2 mt-2 text-xs text-slate-600 cursor-pointer">
+                  <input type="checkbox" checked={remember} onChange={(e) => setLlmApiKey(provider, apiKey, e.target.checked)} className="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+                  <Lock className="size-3 text-slate-400" />
+                  Remember on this device (browser localStorage only)
+                </label>
               </div>
-              <div className="relative">
-                <KeyRound className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  placeholder={PROVIDER_PLACEHOLDERS[provider]}
-                  value={apiKey}
-                  onChange={(e) => setLlmApiKey(provider, e.target.value, remember)}
-                  className="w-full rounded-lg border border-slate-300 bg-slate-50 focus:bg-white pl-8 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
-                />
-                <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700" onClick={() => setShowKey(!showKey)} aria-label="Toggle key visibility">
-                  {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </div>
-              <label className="flex items-center gap-2 mt-2 text-xs text-slate-600 cursor-pointer">
-                <input type="checkbox" checked={remember} onChange={(e) => setLlmApiKey(provider, apiKey, e.target.checked)} className="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-                <Lock className="size-3 text-slate-400" />
-                Remember on this device (browser localStorage only)
-              </label>
-            </div>
+            )}
 
             {/* Model */}
             <div>
@@ -236,38 +288,61 @@ export default function LLMPanel() {
             </div>
           </div>
 
-          {/* Curated quick-pick chips for the active provider */}
+          {/* Curated quick-pick chips for the active provider — grouped by tier when defined */}
           {models.length > 0 && (
             <div className="mt-3">
               <div className="text-xs font-medium text-slate-700 mb-1.5">Quick pick</div>
-              <div className="flex flex-wrap gap-1.5">
-                {models.map((m: { id: string; label: string }) => {
-                  const active = model === m.id;
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setLlmModel(m.id)}
-                      className={
-                        'px-2.5 py-1 rounded-md text-xs font-medium border transition ' +
-                        (active
-                          ? 'bg-brand-50 text-brand-700 border-brand-500'
-                          : 'bg-white text-slate-600 border-slate-200 hover:border-brand-400 hover:text-brand-700')
-                      }
-                      title={m.id}
-                    >
-                      {m.label}
-                    </button>
-                  );
-                })}
-              </div>
+              {(() => {
+                const tiers: { tier: string | undefined; items: typeof models }[] = [];
+                for (const m of models) {
+                  const last = tiers[tiers.length - 1];
+                  if (last && last.tier === m.tier) last.items.push(m);
+                  else tiers.push({ tier: m.tier, items: [m] });
+                }
+                return (
+                  <div className="space-y-2.5">
+                    {tiers.map((group, gi) => (
+                      <div key={group.tier ?? `g${gi}`}>
+                        {group.tier && (
+                          <div className="text-[10px] uppercase tracking-wide font-semibold text-slate-500 mb-1">
+                            {group.tier}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                          {group.items.map((m) => {
+                            const active = model === m.id;
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => setLlmModel(m.id)}
+                                className={
+                                  'px-2.5 py-1 rounded-md text-xs font-medium border transition ' +
+                                  (active
+                                    ? 'bg-brand-50 text-brand-700 border-brand-500'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:border-brand-400 hover:text-brand-700')
+                                }
+                                title={m.id}
+                              >
+                                {m.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
           <div className="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-slate-100">
-            <button className="btn-primary" disabled={running} onClick={run}>
+            <button className="btn-primary" disabled={running || (isLocal && !webgpu.available)} onClick={run}>
               {running ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              {running ? 'Generating...' : 'Generate insights'}
+              {running
+                ? (isLocal && webllmStatus !== 'ready' && webllmLoadedModel !== model ? 'Loading model...' : 'Generating...')
+                : (isLocal && webllmLoadedModel !== model ? 'Download & generate' : 'Generate insights')}
             </button>
             <button className="btn-ghost" onClick={() => setShowPayload((v) => !v)}>
               {showPayload ? 'Hide' : 'Preview'} payload
@@ -285,7 +360,11 @@ export default function LLMPanel() {
 
           <p className="text-xs text-slate-500 flex items-start gap-1.5 mt-4 bg-amber-50/60 border border-amber-200/60 rounded-md px-2.5 py-2">
             <ShieldAlert className="size-3.5 text-amber-600 shrink-0 mt-0.5" />
-            <span>The browser sends this payload directly to {PROVIDER_LABELS[provider]} using your key. The author of this site never sees your data or key.</span>
+            <span>
+              {isLocal
+                ? 'Local (WebLLM) runs entirely on your device via WebGPU. No data, payload, or output ever leaves the browser.'
+                : `The browser sends this payload directly to ${PROVIDER_LABELS[provider]} using your key. The author of this site never sees your data or key.`}
+            </span>
           </p>
         </div>
       </div>
@@ -422,6 +501,84 @@ function fmtSpeed(outputTokens?: number, durationMs?: number): string {
 function fmtTime(ts: number): string {
   const d = new Date(ts);
   return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function WebLLMStatusCard({
+  supported,
+  supportReason,
+  status,
+  progress,
+  loadedModel,
+  selectedModel,
+}: {
+  supported: boolean;
+  supportReason?: string;
+  status: import('../lib/webllm').WebLLMStatus;
+  progress?: import('../lib/webllm').WebLLMProgress;
+  loadedModel?: string;
+  selectedModel: string;
+}) {
+  const pct = Math.max(0, Math.min(100, Math.round((progress?.progress ?? 0) * 100)));
+  const isBusy = status === 'downloading' || status === 'loading';
+  const modelLoaded = loadedModel === selectedModel && status === 'ready';
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-xs font-medium text-slate-700">In-browser engine</label>
+        <a className="text-xs text-brand-600 hover:text-brand-700 inline-flex items-center gap-1" href="https://github.com/mlc-ai/web-llm" target="_blank" rel="noreferrer">
+          About WebLLM <ExternalLink className="size-3" />
+        </a>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
+        {!supported ? (
+          <div className="flex items-start gap-2 text-rose-700">
+            <AlertCircle className="size-4 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium">WebGPU not available</p>
+              <p className="text-xs text-rose-600/90 mt-0.5">{supportReason}</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 text-slate-700">
+              <Cpu className="size-4 text-brand-600" />
+              <span className="font-medium">WebGPU ready</span>
+              {modelLoaded && (
+                <span className="ml-auto inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                  <CheckCircle2 className="size-3" /> Model loaded
+                </span>
+              )}
+              {!modelLoaded && !isBusy && (
+                <span className="ml-auto inline-flex items-center gap-1 text-xs text-slate-500">
+                  <Download className="size-3" /> Will download on first run
+                </span>
+              )}
+            </div>
+            {isBusy && (
+              <div className="mt-2">
+                <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
+                  <span className="truncate pr-2" title={progress?.text}>{progress?.text || 'Loading...'}</span>
+                  <span className="font-mono shrink-0">{pct}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                  <div className="h-full bg-brand-500 transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            )}
+            {loadedModel && loadedModel !== selectedModel && !isBusy && (
+              <p className="mt-2 text-xs text-amber-700">
+                Currently loaded: <span className="font-mono">{loadedModel}</span>. Selecting another model will trigger a fresh download.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        No API key required. Weights cache in your browser after the first download.
+      </p>
+    </div>
+  );
 }
 
 function CallLog({ entries, onClear }: { entries: import('../store').LLMCallLogEntry[]; onClear: () => void }) {

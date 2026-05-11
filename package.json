@@ -33,6 +33,7 @@
     "lint": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.83",
     "jszip": "^3.10.1",
     "lucide-react": "^0.453.0",
     "papaparse": "^5.4.1",

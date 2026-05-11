@@ -27,9 +27,9 @@ export default function App() {
         <div className="max-w-[1500px] mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img
-              src={`${import.meta.env.BASE_URL}icon.png`}
+              src={`${import.meta.env.BASE_URL}ldv-icon.png`}
               alt="LinkedIn Data Visualizer logo"
-              className="size-8 rounded-md shadow-sm"
+              className="size-10 rounded-md shadow-sm"
             />
             <div>
               <h1 className="text-base font-semibold leading-tight flex items-center gap-2">

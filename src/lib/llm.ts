@@ -54,7 +54,7 @@ export interface LLMJobSearchStrategy {
   profileScore: LLMScoreBreakdown;
   strengths: LLMStrength[];           // 6-8 items
   weaknesses: LLMWeakness[];          // 6-8 items
-  topCompanies: LLMTopCompany[];      // 15-18 items, sorted by matchScore desc
+  topCompanies: LLMTopCompany[];      // exactly 10 items, sorted by matchScore desc
   resumeQuickWins: LLMResumeQuickWin[]; // exactly 3
 }
 
@@ -111,9 +111,9 @@ export interface LLMSkillsAdvice {
 
 export interface LLMQuickWins {
   featuredSection: string[];        // recommendations for Featured items
-  customUrlSuggestion: string;      // e.g. linkedin.com/in/firstname-lastname-keyword
+  customUrlSuggestion: string;      // e.g. linkedin.com/in/firstname-lastname
   contentStrategy: string[];        // 3-5 bullets on what to post
-  recommendationRequestTemplate: string; // copy-paste DM template
+  recommendationRequestTemplate: string; // copy-paste DM template for requesting a LinkedIn recommendation from an existing connection
 }
 
 export interface LLMProfileOptimizer {
@@ -331,7 +331,7 @@ type LLMOutput = {
       featuredSection: string[];       // 3-5 specific Featured items to add (project links, posts, articles, case studies)
       customUrlSuggestion: string;     // SHORT and PROFESSIONAL: just "linkedin.com/in/firstnamelastname" or "linkedin.com/in/firstname-lastname" (or with a trailing 1-2 char disambiguator if needed). NEVER stuff job titles, keywords, or hyphenated descriptors into the URL.
       contentStrategy: string[];       // 3-5 bullets on what to post, matching their positioning
-      recommendationRequestTemplate: string; // a paste-ready DM to send to 3 people asking for recommendations, addressed to "[Name]"
+      recommendationRequestTemplate: string; // a paste-ready DM addressed to "[Name]" asking an existing LinkedIn connection who has worked with the user to write a LinkedIn recommendation
     };
   };
 
@@ -362,7 +362,7 @@ type LLMOutput = {
     }[]; // 6-8 items
 
     // PART 2 — TOP COMPANIES TO APPLY (USA)
-    // 15-18 entries, sorted strictly by matchScore (highest first), include a healthy mix of:
+    // Exactly 10 entries, sorted strictly by matchScore (highest first), include a healthy mix of:
     //   FAANG / tier-1, mid-size product companies, high-growth startups, and domain-specific
     //   companies that match the user's niche. Prioritize companies where the user's specific
     //   background gives them an edge — not just brand names.
@@ -399,8 +399,10 @@ Style requirements:
 - About rewrite must be in first person, open with a bold hook, include line breaks for mobile readability, weave in achievements with numbers when the data supports them, and end with a clear CTA.
 - Experience bullets must focus on results and impact, not responsibilities. Use metrics only when the data supports them; otherwise use crisp action+outcome phrasing without fabricated numbers.
 - profileOptimizer.quickWins.customUrlSuggestion MUST be a short, professional handle: only the user's name, e.g. "linkedin.com/in/firstname-lastname". NEVER include job titles, role keywords, or hyphenated descriptors.
+- profileOptimizer.quickWins.recommendationRequestTemplate MUST be for existing connections who already know the user's work, such as former managers, teammates, clients, mentors, or stakeholders. It must ask for a LinkedIn recommendation that highlights 1-2 specific strengths or projects from the user's actual profile. Do NOT write it as a cold connection request, networking opener, coffee chat request, or "learn from your experience" message.
 - jobSearchStrategy.profileScore.overall MUST equal impact + clarity + relevance + recruiterFriendliness.
-- jobSearchStrategy.topCompanies MUST contain 15-18 entries, sorted by matchScore descending, with rank assigned in that sorted order.
+- jobSearchStrategy.topCompanies MUST contain exactly 10 entries, sorted by matchScore descending, with rank assigned in that sorted order.
+- actionPlan30Day MUST be present and MUST contain exactly 4 entries: week 1, week 2, week 3, and week 4. Each week must include a focus and 3-5 concrete actions. Do not omit this section.
 - jobSearchStrategy.resumeQuickWins MUST contain exactly 3 entries.
 - jobSearchStrategy.strengths and weaknesses MUST each contain 6-8 entries that reference specific content from the profile.
 - Be brutally honest about weaknesses. Do not sugarcoat. Be opinionated. Pick winners. Don't hedge.
@@ -429,7 +431,20 @@ export interface LLMCallMeta {
   extra?: Record<string, unknown>;
 }
 
-export type LLMCallResult = { raw: string; parsed?: LLMOutput; meta: LLMCallMeta };
+export interface JSONExtractionResult {
+  parsed?: LLMOutput;
+  extracted?: string;
+  error?: string;
+  diagnostics: string[];
+}
+
+export type LLMCallResult = {
+  raw: string;
+  parsed?: LLMOutput;
+  meta: LLMCallMeta;
+  parseError?: string;
+  diagnostics?: string[];
+};
 
 export async function callOpenRouter(params: LLMCallParams): Promise<LLMCallResult> {
   if (!params.apiKey) throw new Error('OpenRouter API key is required');
@@ -484,12 +499,7 @@ export async function callOpenRouter(params: LLMCallParams): Promise<LLMCallResu
     );
   }
 
-  let parsed: LLMOutput | undefined;
-  try {
-    parsed = JSON.parse(stripJsonFences(raw)) as LLMOutput;
-  } catch {
-    parsed = undefined;
-  }
+  const { parsed, error: parseError, diagnostics } = extractJson(raw);
   const usage = data?.usage ?? {};
   const meta: LLMCallMeta = {
     modelRequested: params.model,
@@ -501,7 +511,7 @@ export async function callOpenRouter(params: LLMCallParams): Promise<LLMCallResu
     costUsd: typeof usage.total_cost === 'number' ? usage.total_cost : undefined,
     extra: { provider_name: data?.provider, id: data?.id },
   };
-  return { raw, parsed, meta };
+  return { raw, parsed, meta, parseError, diagnostics };
 }
 
 export async function callOpenAI(params: LLMCallParams): Promise<LLMCallResult> {
@@ -536,12 +546,7 @@ export async function callOpenAI(params: LLMCallParams): Promise<LLMCallResult> 
   const data = await res.json();
   const choice = data?.choices?.[0];
   const raw: string = choice?.message?.content ?? '';
-  let parsed: LLMOutput | undefined;
-  try {
-    parsed = JSON.parse(stripJsonFences(raw)) as LLMOutput;
-  } catch {
-    parsed = undefined;
-  }
+  const { parsed, error: parseError, diagnostics } = extractJson(raw);
   const usage = data?.usage ?? {};
   const meta: LLMCallMeta = {
     modelRequested: params.model,
@@ -552,7 +557,7 @@ export async function callOpenAI(params: LLMCallParams): Promise<LLMCallResult> 
     finishReason: choice?.finish_reason,
     extra: { id: data?.id },
   };
-  return { raw, parsed, meta };
+  return { raw, parsed, meta, parseError, diagnostics };
 }
 
 export async function callAnthropic(params: LLMCallParams): Promise<LLMCallResult> {
@@ -587,12 +592,7 @@ export async function callAnthropic(params: LLMCallParams): Promise<LLMCallResul
   }
   const data = await res.json();
   const raw: string = data?.content?.[0]?.text ?? '';
-  let parsed: LLMOutput | undefined;
-  try {
-    parsed = JSON.parse(stripJsonFences(raw)) as LLMOutput;
-  } catch {
-    parsed = undefined;
-  }
+  const { parsed, error: parseError, diagnostics } = extractJson(raw);
   const usage = data?.usage ?? {};
   const inputTokens: number | undefined = usage.input_tokens;
   const outputTokens: number | undefined = usage.output_tokens;
@@ -605,7 +605,7 @@ export async function callAnthropic(params: LLMCallParams): Promise<LLMCallResul
     finishReason: data?.stop_reason,
     extra: { id: data?.id },
   };
-  return { raw, parsed, meta };
+  return { raw, parsed, meta, parseError, diagnostics };
 }
 
 export async function callGoogle(params: LLMCallParams): Promise<LLMCallResult> {
@@ -640,12 +640,7 @@ export async function callGoogle(params: LLMCallParams): Promise<LLMCallResult> 
   const data = await res.json();
   const candidate = data?.candidates?.[0];
   const raw: string = candidate?.content?.parts?.[0]?.text ?? '';
-  let parsed: LLMOutput | undefined;
-  try {
-    parsed = JSON.parse(stripJsonFences(raw)) as LLMOutput;
-  } catch {
-    parsed = undefined;
-  }
+  const { parsed, error: parseError, diagnostics } = extractJson(raw);
   const usage = data?.usageMetadata ?? {};
   const meta: LLMCallMeta = {
     modelRequested: params.model,
@@ -655,7 +650,7 @@ export async function callGoogle(params: LLMCallParams): Promise<LLMCallResult> 
     totalTokens: usage.totalTokenCount,
     finishReason: candidate?.finishReason,
   };
-  return { raw, parsed, meta };
+  return { raw, parsed, meta, parseError, diagnostics };
 }
 
 /**
@@ -721,12 +716,7 @@ export async function callHuggingFace(params: LLMCallParams): Promise<LLMCallRes
     );
   }
 
-  let parsed: LLMOutput | undefined;
-  try {
-    parsed = JSON.parse(stripJsonFences(raw)) as LLMOutput;
-  } catch {
-    parsed = undefined;
-  }
+  const { parsed, error: parseError, diagnostics } = extractJson(raw);
   const usage = data?.usage ?? {};
   const meta: LLMCallMeta = {
     modelRequested: params.model,
@@ -737,24 +727,202 @@ export async function callHuggingFace(params: LLMCallParams): Promise<LLMCallRes
     finishReason: choice?.finish_reason,
     extra: { provider_name: data?.provider, id: data?.id },
   };
-  return { raw, parsed, meta };
+  return { raw, parsed, meta, parseError, diagnostics };
 }
 
 function stripJsonFences(s: string): string {
   return s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
 }
 
+function fixTrailingCommas(json: string): string {
+  return json.replace(/,(?=\s*[\]\}])/g, '');
+}
+
+function fixUnescapedNewlinesInStrings(json: string): string {
+  let result = '';
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < json.length; i++) {
+    const char = json[i];
+    if (inString) {
+      if (escapeNext) {
+        escapeNext = false;
+        result += char;
+      } else if (char === '\\') {
+        escapeNext = true;
+        result += char;
+      } else if (char === '"') {
+        inString = false;
+        result += char;
+      } else if (char === '\n') {
+        result += '\\n';
+      } else if (char === '\r') {
+        // skip carriage returns
+      } else {
+        result += char;
+      }
+    } else {
+      if (char === '"') {
+        inString = true;
+      }
+      result += char;
+    }
+  }
+  return result;
+}
+
+function extractBalancedJSON(text: string): string | undefined {
+  const firstBrace = text.indexOf('{');
+  if (firstBrace === -1) return undefined;
+
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = firstBrace; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (escapeNext) {
+        escapeNext = false;
+      } else if (char === '\\') {
+        escapeNext = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+    } else {
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{' || char === '[') {
+        depth++;
+      } else if (char === '}' || char === ']') {
+        depth--;
+        if (depth === 0) {
+          return text.slice(firstBrace, i + 1);
+        }
+      }
+    }
+  }
+
+  // Unbalanced — return subset for recovery attempts
+  return text.slice(firstBrace);
+}
+
+export function extractJson(raw: string): JSONExtractionResult {
+  const diagnostics: string[] = [];
+
+  // 1. Strip markdown fences
+  const text = stripJsonFences(raw);
+  if (text !== raw.trim()) {
+    diagnostics.push('Stripped markdown code fences');
+  }
+
+  // 2. Direct parse attempt
+  try {
+    const parsed = JSON.parse(text) as LLMOutput;
+    diagnostics.push('Parsed directly as valid JSON');
+    return { parsed, extracted: text, diagnostics };
+  } catch (e) {
+    diagnostics.push(`Direct parse failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // 3. Extract balanced JSON subset
+  const extracted = extractBalancedJSON(text);
+  if (!extracted) {
+    diagnostics.push('Could not find a balanced JSON object/array in the response');
+    return { error: 'No JSON object found', diagnostics };
+  }
+  if (extracted !== text) {
+    diagnostics.push('Extracted balanced JSON subset from surrounding text');
+  }
+
+  // 4. Try parsing extracted subset
+  try {
+    const parsed = JSON.parse(extracted) as LLMOutput;
+    diagnostics.push('Parsed after extracting balanced JSON');
+    return { parsed, extracted, diagnostics };
+  } catch (e) {
+    diagnostics.push(`Extracted JSON parse failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // 5. Fix trailing commas
+  const noTrailingComma = fixTrailingCommas(extracted);
+  if (noTrailingComma !== extracted) {
+    diagnostics.push('Removed trailing commas');
+    try {
+      const parsed = JSON.parse(noTrailingComma) as LLMOutput;
+      diagnostics.push('Parsed after removing trailing commas');
+      return { parsed, extracted: noTrailingComma, diagnostics };
+    } catch (e) {
+      diagnostics.push(`Trailing comma fix failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // 6. Fix unescaped newlines in strings
+  const fixedNewlines = fixUnescapedNewlinesInStrings(extracted);
+  if (fixedNewlines !== extracted) {
+    diagnostics.push('Escaped literal newlines inside string values');
+    try {
+      const parsed = JSON.parse(fixedNewlines) as LLMOutput;
+      diagnostics.push('Parsed after escaping newlines in strings');
+      return { parsed, extracted: fixedNewlines, diagnostics };
+    } catch (e) {
+      diagnostics.push(`Newline fix failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // 7. Try combined fixes
+  const combined = fixUnescapedNewlinesInStrings(fixTrailingCommas(extracted));
+  if (combined !== extracted && combined !== noTrailingComma && combined !== fixedNewlines) {
+    diagnostics.push('Applied trailing comma + newline fixes together');
+    try {
+      const parsed = JSON.parse(combined) as LLMOutput;
+      diagnostics.push('Parsed after combined fixes');
+      return { parsed, extracted: combined, diagnostics };
+    } catch (e) {
+      diagnostics.push(`Combined fix failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // 8. If truncated (unbalanced), add missing closing braces/brackets
+  const openBraces = (extracted.match(/\{/g) || []).length;
+  const closeBraces = (extracted.match(/\}/g) || []).length;
+  const openBrackets = (extracted.match(/\[/g) || []).length;
+  const closeBrackets = (extracted.match(/\]/g) || []).length;
+
+  if (openBraces > closeBraces || openBrackets > closeBrackets) {
+    let padded = extracted;
+    while ((padded.match(/\}/g) || []).length < openBraces) padded += '}';
+    while ((padded.match(/\]/g) || []).length < openBrackets) padded += ']';
+    diagnostics.push(`Added missing closing braces/brackets (${openBraces - closeBraces} braces, ${openBrackets - closeBrackets} brackets)`);
+    try {
+      const parsed = JSON.parse(padded) as LLMOutput;
+      diagnostics.push('Parsed after adding missing closers');
+      return { parsed, extracted: padded, diagnostics };
+    } catch (e) {
+      diagnostics.push(`Closing brace fix failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return {
+    error: 'Could not parse JSON after all recovery attempts',
+    extracted,
+    diagnostics,
+  };
+}
+
 export const PROVIDER_MODELS: Record<string, { id: string; label: string }[]> = {
   openrouter: [
-    { id: 'openrouter/free', label: 'OpenRouter Free Router (auto-picks free models)' },
-    { id: 'openrouter/auto', label: 'OpenRouter Auto Router (best model for the task)' },
+    { id: 'openrouter/free', label: 'Free Model Router' },
+    { id: 'openrouter/auto', label: 'Best Model Router' },
     { id: 'openrouter/owl-alpha', label: 'Owl Alpha' },
-    { id: 'google/gemma-4-31b-it:free', label: 'Gemma 4 31B' },
+    { id: 'google/gemma-4-26b-a4b-it:free', label: 'Gemma 4 26B A4B' },
     { id: 'openai/gpt-oss-120b:free', label: 'GPT OSS 120B' },
+    { id: '~openai/gpt-latest', label: 'GPT Latest' },
     { id: '~openai/gpt-mini-latest', label: 'GPT Mini' },
+    { id: '~anthropic/claude-haiku-latest', label: 'Claude Haiku' },
     { id: '~anthropic/claude-sonnet-latest', label: 'Claude Sonnet' },
     { id: '~moonshotai/kimi-latest', label: 'Kimi Latest' },
-    { id: '~anthropic/claude-haiku-latest', label: 'Claude Haiku' },
 
   ],
   openai: [
@@ -775,14 +943,12 @@ export const PROVIDER_MODELS: Record<string, { id: string; label: string }[]> = 
     { id: 'gemini-1.0-pro', label: 'Gemini 1.0 Pro' },
   ],
   huggingface: [
+    { id: 'deepseek-ai/DeepSeek-V4-Pro:novita', label: 'DeepSeek V4 Pro' },
+    { id: 'moonshotai/Kimi-K2.6:novita', label: 'Kimi K2.6' },
     { id: 'meta-llama/Llama-3.3-70B-Instruct', label: 'Llama 3.3 70B Instruct' },
     { id: 'meta-llama/Meta-Llama-3.1-8B-Instruct', label: 'Llama 3.1 8B Instruct (fast)' },
     { id: 'Qwen/Qwen2.5-72B-Instruct', label: 'Qwen 2.5 72B Instruct' },
-    { id: 'Qwen/QwQ-32B', label: 'Qwen QwQ 32B (reasoning)' },
     { id: 'mistralai/Mistral-Nemo-Instruct-2407', label: 'Mistral Nemo 12B Instruct' },
-    { id: 'mistralai/Mixtral-8x7B-Instruct-v0.1', label: 'Mixtral 8x7B Instruct' },
-    { id: 'deepseek-ai/DeepSeek-V4-Pro:novita', label: 'DeepSeek V4 Pro (Novita)' },
-    { id: 'deepseek-ai/DeepSeek-V3', label: 'DeepSeek V3' },
     { id: 'google/gemma-4-31B-it', label: 'Gemma 4 31B Instruct' },
     { id: 'HuggingFaceH4/zephyr-7b-beta', label: 'Zephyr 7B Beta' },
   ],

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Sparkles, KeyRound, Loader2, ShieldAlert, Eye, EyeOff, ExternalLink, Lock } from 'lucide-react';
+import { Sparkles, KeyRound, Loader2, ShieldAlert, Eye, EyeOff, ExternalLink, Lock, Copy, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
 import { useStore, LLMProvider } from '../store';
 import { PROVIDER_MODELS, buildPromptPayload, callOpenRouter, callOpenAI, callAnthropic, callGoogle, callHuggingFace } from '../lib/llm';
 
@@ -292,10 +292,107 @@ export default function LLMPanel() {
 
       <CallLog entries={callLog} onClear={clearLlmCallLog} />
 
+      {result && result.parsed && (
+        <div className="card">
+          <div className="flex items-start gap-2 mb-3">
+            <CheckCircle2 className="size-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold">Generation parsed successfully</h3>
+              <p className="text-sm text-slate-600">
+                Open the AI tabs in the sidebar to view the rendered sections below.
+              </p>
+            </div>
+          </div>
+          <ul className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+            {([
+              ['profileOptimizer', 'Profile Optimizer'],
+              ['jobSearchStrategy', 'Job Search Strategy'],
+              ['actionPlan30Day', '30-day Action Plan'],
+            ] as const).map(([key, label]) => {
+              const val = result.parsed?.[key];
+              const present = Array.isArray(val) ? val.length > 0 : !!val;
+              return (
+                <li
+                  key={key}
+                  className={
+                    'rounded-lg border px-3 py-2 flex items-center gap-2 ' +
+                    (present
+                      ? 'border-emerald-200 bg-emerald-50/60 text-emerald-800'
+                      : 'border-slate-200 bg-slate-50 text-slate-500')
+                  }
+                >
+                  {present ? <CheckCircle2 className="size-4" /> : <XCircle className="size-4" />}
+                  <span className="font-medium">{label}</span>
+                </li>
+              );
+            })}
+          </ul>
+          {result.diagnostics && result.diagnostics.length > 1 && (
+            <details className="mt-3">
+              <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
+                Parse diagnostics ({result.diagnostics.length})
+              </summary>
+              <ul className="mt-2 text-xs text-slate-600 space-y-0.5 list-disc list-inside">
+                {result.diagnostics.map((d, i) => <li key={i}>{d}</li>)}
+              </ul>
+            </details>
+          )}
+          <details className="mt-2">
+            <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
+              Show raw model output ({result.raw.length.toLocaleString()} chars)
+            </summary>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  try { await navigator.clipboard.writeText(result.raw); } catch { /* ignore */ }
+                }}
+                className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-300 bg-white hover:border-brand-500 hover:text-brand-700 text-slate-600 transition"
+              >
+                <Copy className="size-3" /> Copy raw
+              </button>
+            </div>
+            <pre className="mt-2 text-xs bg-slate-900 text-slate-100 rounded-lg p-3 overflow-auto max-h-96">{result.raw}</pre>
+          </details>
+        </div>
+      )}
+
       {result && !result.parsed && (
         <div className="card">
-          <h3 className="font-semibold mb-1">Model returned non-JSON output</h3>
-          <p className="text-sm text-slate-600 mb-2">Showing raw response. Try a different model or rerun.</p>
+          <div className="flex items-start gap-2 mb-2">
+            <AlertCircle className="size-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold">Model returned non-JSON output</h3>
+              <p className="text-sm text-slate-600">
+                The response couldn’t be parsed as the expected JSON schema.
+                {result.parseError ? ` ${result.parseError}` : ''}
+              </p>
+            </div>
+          </div>
+
+          {result.diagnostics && result.diagnostics.length > 0 && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
+              <p className="text-xs font-semibold text-amber-800 mb-1">Recovery attempts</p>
+              <ul className="text-xs text-amber-700 space-y-0.5 list-disc list-inside">
+                {result.diagnostics.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 mb-2">
+            <button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(result.raw);
+                } catch { /* ignore */ }
+              }}
+              className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-300 bg-white hover:border-brand-500 hover:text-brand-700 text-slate-600 transition"
+            >
+              <Copy className="size-3" /> Copy raw
+            </button>
+            <span className="text-xs text-slate-500">Try a model with stronger JSON mode (e.g. GPT-4o, Claude 3.5 Sonnet)</span>
+          </div>
           <pre className="text-xs bg-slate-900 text-slate-100 rounded-lg p-3 overflow-auto max-h-96">{result.raw}</pre>
         </div>
       )}

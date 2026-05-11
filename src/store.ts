@@ -10,6 +10,8 @@ interface LLMResult {
   raw: string;
   parsed?: import('./lib/llm').LLMOutput;
   meta?: import('./lib/llm').LLMCallMeta;
+  parseError?: string;
+  diagnostics?: string[];
 }
 
 export interface LLMCallLogEntry {

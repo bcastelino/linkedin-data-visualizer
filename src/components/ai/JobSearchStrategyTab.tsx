@@ -33,7 +33,7 @@ export default function JobSearchStrategyTab({ onOpenGenerator }: { onOpenGenera
   }
 
   const tone = INTENT_TONE[js.intent] ?? INTENT_TONE.unknown;
-  const sortedCompanies = [...(js.topCompanies ?? [])].sort((a, b) => b.matchScore - a.matchScore);
+  const sortedCompanies = [...(js.topCompanies ?? [])].sort((a, b) => b.matchScore - a.matchScore).slice(0, 10);
 
   return (
     <div className="space-y-4">

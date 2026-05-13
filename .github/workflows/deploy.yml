@@ -3,6 +3,21 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # Only redeploy when files that actually affect the built app change.
+    # Docs-only or meta changes (README, LICENSE, .gitignore, issue templates, etc.)
+    # will not trigger a Pages rebuild. Use the manual `workflow_dispatch` trigger
+    # below to force a deploy if needed.
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - "tsconfig*.json"
+      - "tailwind.config.js"
+      - "postcss.config.js"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 permissions:

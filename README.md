@@ -10,6 +10,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Vite](https://img.shields.io/badge/Vite-5-646cff?logo=vite&logoColor=white)](https://vite.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3-38bdf8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Version](https://img.shields.io/badge/version-0.1.0-1f6feb)](./package.json)
 
 [**Live Demo**](https://bcastelino.github.io/linkedin-data-visualizer/) · [Report Bug](https://github.com/bcastelino/linkedin-data-visualizer/issues) · [Request Feature](https://github.com/bcastelino/linkedin-data-visualizer/issues)
 
@@ -26,11 +27,15 @@ LinkedIn lets you download your full data export but offers no first-class way t
 ## Features
 
 - **Drag-and-drop ZIP parsing** - `jszip` + `papaparse` decode your export entirely client-side.
-- **Seven dashboards** - Overview, Network, Content, Career, Messaging, Ads & Inferences, and Account & Security, with charts (Recharts) and curated KPIs.
+- **Eight Direct Insights dashboards** - Overview, Network, Content, **Jobs**, Career, Messaging, Ads & Inferences, and Account & Security, with charts (Recharts) and curated KPIs.
+- **Three AI Insights views** - **Profile Optimizer**, **Job Search Strategy**, and **30-day Action Plan**, each rendered from a single structured LLM response.
 - **Deterministic findings engine** - evidence-backed insights computed locally with no LLM required.
 - **Composite scores** - visibility, network health, career momentum, content output, and privacy posture (0–100).
-- **Optional AI insights** - bring your own key for **OpenRouter, OpenAI, Anthropic, Google Gemini, or HuggingFace**. Quick-pick chips for popular models, free-text input for any model id, "Browse all models" deep-links per provider.
-- **LLM call log** - per-call table with date, routed model, tokens (input/output), cost, speed (tok/s), and finish reason - similar to OpenRouter's activity view.
+- **Sample data mode** - one-click download of a synthetic LinkedIn export ZIP so you can try the app without your own data.
+- **BYO-key AI** - **OpenRouter, OpenAI, Anthropic, Google Gemini, or HuggingFace**. Quick-pick chips for popular models, free-text input for any model id, and a "Browse all models" deep-link per provider.
+- **On-device inference (WebLLM)** - run open-source models (Llama, Mistral, Qwen, Gemma, Phi, …) entirely in your browser via WebGPU. No API key, no network call - weights cached locally after first load.
+- **LLM call log** - per-call table with date, provider, routed model, tokens (input/output), cost, speed (tok/s), and finish reason - similar to OpenRouter's activity view.
+- **Payload preview** - inspect the exact aggregate JSON sent to the LLM before clicking Generate.
 - **Downloadable HTML report** - single self-contained `.html` with aggregate metrics, SVG charts, findings, and the AI narrative. Raw rows, message bodies, IPs, and contact identifiers are intentionally excluded.
 - **Static-host friendly** - zero backend; ships to GitHub Pages, Cloudflare Pages, Vercel, or any static host.
 
@@ -99,30 +104,40 @@ Bring your own key - pick whichever you prefer:
 | **Anthropic** | Claude 3.5 Sonnet, Opus | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
 | **Google Gemini** | 1.5 Pro / Flash, free tier available | [ai.google.dev](https://ai.google.dev/api?active=genai) |
 | **HuggingFace** | Open-source models (Llama, Mistral, Qwen, Gemma, …) | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
+| **Local (WebLLM)** | Runs entirely in your browser via WebGPU - no API key, no network | [mlc.ai/models](https://mlc.ai/models) |
 
 The model field accepts any model id from the provider - quick-pick chips are provided for convenience, and a "Browse all models" link opens each provider's catalog.
+
+### On-device inference (WebLLM)
+
+Select the **Local (WebLLM)** provider to run a model fully in-browser via [@mlc-ai/web-llm](https://github.com/mlc-ai/web-llm). The first run downloads the model weights into your browser's Cache Storage / IndexedDB (typically 1–4 GB depending on the model); subsequent runs are instant. Requires a WebGPU-capable browser (latest Chrome, Edge, or Brave on a desktop with a discrete or integrated GPU).
 
 ## Architecture
 
 ```text
 src/
 ├── components/         UI: dashboards, panels, AI tab, upload zone, charts
-│   ├── ai/             AI summary tab + sub-views
-│   └── tabs/           One component per dashboard tab
+│   ├── ai/             AI insight tabs: Profile Optimizer, Job Search Strategy, 30-day Action Plan
+│   └── tabs/           Direct-insight dashboards (overview, network, content, jobs, career, …)
 ├── lib/
-│   ├── parser.ts       ZIP → typed objects (jszip + papaparse + workers)
+│   ├── zip.ts          ZIP extraction helpers
+│   ├── csv.ts          CSV parsing helpers (papaparse wrappers)
+│   ├── parse.ts        ZIP → typed `ParsedExport`
+│   ├── tabFiles.ts     Per-tab file-usage manifest (powers the "Files used" popover)
 │   ├── insights.ts     Deterministic metrics & scoring
 │   ├── llm.ts          Provider adapters + payload builder + JSON schema
+│   ├── webllm.ts       In-browser WebGPU engine wrapper (@mlc-ai/web-llm)
+│   ├── sampleData.ts   Synthetic LinkedIn export generator
 │   └── report.ts       Self-contained HTML report generator
-├── store.ts            Zustand store (state, LLM keys, call log)
+├── store.ts            Zustand store (state, LLM keys, WebLLM status, call log)
 └── types.ts            Shared TypeScript types
 ```
 
 ### Key flows
 
-1. **Upload** - `UploadZone` hands the `File` to `parser.ts`, which streams CSVs out of the ZIP and emits a typed `ParsedExport`.
+1. **Upload** - `UploadZone` hands the `File` to `parse.ts`, which streams CSVs out of the ZIP (`zip.ts` + `csv.ts`) and emits a typed `ParsedExport`.
 2. **Insights** - `insights.ts` rolls the parsed data into `DerivedInsights` (totals, monthly trends, top-N lists, scores).
-3. **AI (optional)** - `llm.ts#buildPromptPayload` extracts an aggregate-only payload and sends it to the chosen provider through one of the `callOpenRouter` / `callOpenAI` / `callAnthropic` / `callGoogle` / `callHuggingFace` adapters. Each adapter normalizes token usage, finish reason, model used, and cost into a common `LLMCallMeta` consumed by the call-log table.
+3. **AI (optional)** - `llm.ts#buildPromptPayload` extracts an aggregate-only payload and sends it to the chosen provider through one of the `callOpenRouter` / `callOpenAI` / `callAnthropic` / `callGoogle` / `callHuggingFace` / `callWebLLM` adapters. Each adapter normalizes token usage, finish reason, model used, and cost into a common `LLMCallMeta` consumed by the call-log table.
 4. **Report** - `report.ts` produces a stand-alone HTML document with inline SVG charts and the AI narrative.
 
 ## Deploy to GitHub Pages
@@ -151,11 +166,14 @@ VITE_BASE="/" npm run build
 | State | Zustand |
 | Charts | Recharts |
 | Parsing | JSZip + Papaparse |
+| On-device LLM | @mlc-ai/web-llm (WebGPU) |
 | Icons | Lucide |
 
 ## Roadmap
 
-- [ ] WebLLM adapter for fully on-device inference (WebGPU)
+- [x] WebLLM adapter for fully on-device inference (WebGPU)
+- [x] Synthetic sample-data mode for try-before-export
+- [x] Dedicated Jobs dashboard and AI Insights tabs (Profile Optimizer, Job Search Strategy, 30-day Action Plan)
 - [ ] Local Ollama / LM Studio adapter (custom OpenAI-compatible base URL)
 - [ ] Per-provider price table to populate Cost in the call log for non-OpenRouter providers
 - [ ] PDF export (in addition to HTML report)
